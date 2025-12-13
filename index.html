@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Report on Letterhead</title>
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f5f8;
+      padding: 20px;
+    }
+    .card {
+      max-width: 520px;
+      margin: auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 12px rgba(0,0,0,0.1);
+    }
+    h2 {
+      text-align: center;
+    }
+    label {
+      font-weight: bold;
+      margin-top: 15px;
+      display: block;
+    }
+    input {
+      width: 100%;
+      margin-top: 5px;
+    }
+    button {
+      margin-top: 20px;
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: #6c757d;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+    .status {
+      font-size: 13px;
+      margin-top: 10px;
+      text-align: center;
+      color: green;
+    }
+    .note {
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>Diagnostic Report Tool</h2>
+
+  <div id="letterheadSection">
+    <label>Upload Letterhead (One Time Only)</label>
+    <input type="file" id="letterheadInput" accept="application/pdf">
+    <button class="secondary" onclick="saveLetterhead()">Save Letterhead</button>
+  </div>
+
+  <div id="savedStatus" class="status" style="display:none;">
+    ✅ Letterhead saved successfully
+  </div>
+
+  <label>Upload Report PDF</label>
+  <input type="file" id="reportInput" accept="application/pdf">
+
+  <button onclick="generateReport()">Generate Final PDF</button>
+
+  <button class="secondary" onclick="clearLetterhead()">Change Letterhead</button>
+
+  <div class="note">
+    Files are processed locally. Nothing is uploaded.
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = "savedLetterheadPDF";
+
+window.onload = () => {
+  if (localStorage.getItem(STORAGE_KEY)) {
+    document.getElementById("letterheadSection").style.display = "none";
+    document.getElementById("savedStatus").style.display = "block";
+  }
+};
+
+async function saveLetterhead() {
+  const file = document.getElementById("letterheadInput").files[0];
+  if (!file) {
+    alert("Please select a letterhead PDF.");
+    return;
+  }
+
+  const buffer = await file.arrayBuffer();
+  const base64 = btoa(
+    new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+  );
+
+  localStorage.setItem(STORAGE_KEY, base64);
+
+  document.getElementById("letterheadSection").style.display = "none";
+  document.getElementById("savedStatus").style.display = "block";
+}
+
+function clearLetterhead() {
+  if (confirm("Are you sure you want to change the letterhead?")) {
+    localStorage.removeItem(STORAGE_KEY);
+    location.reload();
+  }
+}
+
+async function generateReport() {
+  const reportFile = document.getElementById("reportInput").files[0];
+  const storedLetterhead = localStorage.getItem(STORAGE_KEY);
+
+  if (!storedLetterhead) {
+    alert("Please upload and save letterhead first.");
+    return;
+  }
+  if (!reportFile) {
+    alert("Please upload a report PDF.");
+    return;
+  }
+
+  const letterheadBytes = Uint8Array.from(atob(storedLetterhead), c => c.charCodeAt(0));
+  const reportBytes = await reportFile.arrayBuffer();
+
+  const outputPdf = await PDFLib.PDFDocument.create();
+  const letterheadPdf = await PDFLib.PDFDocument.load(letterheadBytes);
+  const reportPdf = await PDFLib.PDFDocument.load(reportBytes);
+
+  const [lhPage] = await outputPdf.copyPages(letterheadPdf, [0]);
+  const lhEmbed = await outputPdf.embedPage(lhPage);
+
+  const reportPages = reportPdf.getPages();
+
+  for (let i = 0; i < reportPages.length; i++) {
+    const [contentPage] = await outputPdf.copyPages(reportPdf, [i]);
+    const page = outputPdf.addPage([
+      contentPage.getWidth(),
+      contentPage.getHeight()
+    ]);
+
+    page.drawPage(lhEmbed, {
+      x: 0,
+      y: 0,
+      width: page.getWidth(),
+      height: page.getHeight()
+    });
+
+    page.drawPage(contentPage, {
+      x: 0,
+      y: 0,
+      width: page.getWidth(),
+      height: page.getHeight()
+    });
+  }
+
+  const finalBytes = await outputPdf.save();
+  const blob = new Blob([finalBytes], { type: "application/pdf" });
+
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "Final_Report_On_Letterhead.pdf";
+  link.click();
+}
+</script>
+
+</body>
+</html>
