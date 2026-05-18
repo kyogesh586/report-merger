@@ -189,11 +189,9 @@
         }
       }
     }
-
-    async function generateReport() {
+async function generateReport() {
       clearError();
       const reportFile = document.getElementById("reportInput").files[0];
-      
       if (!reportFile) {
         alert("Please upload a report PDF.");
         return;
@@ -212,7 +210,6 @@
         }
 
         const reportBytes = await reportFile.arrayBuffer();
-
         const outputPdf = await PDFLib.PDFDocument.create();
         const letterheadPdf = await PDFLib.PDFDocument.load(letterheadBytes);
         const reportPdf = await PDFLib.PDFDocument.load(reportBytes);
@@ -223,22 +220,26 @@
 
         for (let i = 0; i < reportPages.length; i++) {
           const [contentPage] = await outputPdf.copyPages(reportPdf, [i]);
+          
+          // FIX: Embed the content page so it turns into a valid PDFEmbeddedPage object
+          const contentEmbed = await outputPdf.embedPage(contentPage);
+          
           const page = outputPdf.addPage([contentPage.getWidth(), contentPage.getHeight()]);
           
+          // 1. Draw letterhead background layer first
           page.drawPage(lhEmbed, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
-          page.drawPage(contentPage, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
+          
+          // 2. Draw report content layer on top (using the new contentEmbed variable)
+          page.drawPage(contentEmbed, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
         }
 
         const finalBytes = await outputPdf.save();
         const blob = new Blob([finalBytes], { type: "application/pdf" });
-        
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = "Final_Report_On_Letterhead.pdf";
         link.click();
-        
         setTimeout(() => URL.revokeObjectURL(link.href), 100);
-
       } catch (error) {
         console.error(error);
         showError("An error occurred during merge: " + error.message);
@@ -246,6 +247,7 @@
         genBtn.disabled = false;
         genBtn.innerText = "Generate Final PDF";
       }
+    }
     }
   </script>
 </body>
