@@ -112,16 +112,33 @@
       document.getElementById("errorStatus").style.display = "none";
     }
 
+    function updateVisibility(hasLetterhead) {
+      const lhSection = document.getElementById("letterheadSection");
+      const savedStatus = document.getElementById("savedStatus");
+      const generateBtn = document.getElementById("generateBtn");
+      const clearLhBtn = document.getElementById("clearLhBtn");
+
+      if (hasLetterhead) {
+        lhSection.style.display = "none";
+        savedStatus.style.display = "block";
+        clearLhBtn.style.display = "block";
+        generateBtn.disabled = false;
+      } else {
+        lhSection.style.display = "block";
+        savedStatus.style.display = "none";
+        clearLhBtn.style.display = "none";
+        generateBtn.disabled = true;
+      }
+    }
+
     // --- App Logic ---
     window.onload = async () => {
       try {
         const hasLh = await getStoredLetterhead();
-        if (hasLh) {
-          document.getElementById("letterheadSection").style.display = "none";
-          document.getElementById("savedStatus").style.display = "block";
-        }
+        updateVisibility(!!hasLh);
       } catch (err) {
         console.error("Failed to read from IndexedDB:", err);
+        updateVisibility(false);
       }
 
       // Attach event listeners safely
@@ -145,18 +162,16 @@
       try {
         const buffer = await file.arrayBuffer();
         
-        // Quick verification: attempt to load it with pdf-lib to check if it's corrupted
+        // Verify file is a valid PDF structure
         await PDFLib.PDFDocument.load(buffer);
         
-        // Save raw ArrayBuffer directly to IndexedDB (No performance-heavy base64 conversions)
+        // Store to IndexedDB
         await setStoredLetterhead(buffer);
-
-        document.getElementById("letterheadSection").style.display = "none";
-        document.getElementById("savedStatus").style.display = "block";
+        updateVisibility(true);
       } catch (error) {
         console.error(error);
-        showError("Error saving letterhead: Ensure the file is a valid, unencrypted PDF.");
-      } finally {
+        showError("Error saving letterhead: " + error.message);
+        // Reset save button if it fails
         saveBtn.disabled = false;
         saveBtn.innerText = "Save Letterhead";
       }
@@ -166,7 +181,8 @@
       if (confirm("Are you sure you want to change the letterhead?")) {
         try {
           await clearStoredLetterhead();
-          location.reload();
+          document.getElementById("letterheadInput").value = ""; // Clear file input element
+          updateVisibility(false);
         } catch (error) {
           console.error(error);
           showError("Failed to clear letterhead from local storage.");
@@ -191,8 +207,7 @@
         const letterheadBytes = await getStoredLetterhead();
         if (!letterheadBytes) {
           alert("Please upload and save a letterhead first.");
-          genBtn.disabled = false;
-          genBtn.innerText = "Generate Final PDF";
+          updateVisibility(false);
           return;
         }
 
@@ -210,9 +225,7 @@
           const [contentPage] = await outputPdf.copyPages(reportPdf, [i]);
           const page = outputPdf.addPage([contentPage.getWidth(), contentPage.getHeight()]);
           
-          // Render background layer
           page.drawPage(lhEmbed, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
-          // Render data overlay layer
           page.drawPage(contentPage, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
         }
 
@@ -224,17 +237,15 @@
         link.download = "Final_Report_On_Letterhead.pdf";
         link.click();
         
-        // Clean memory allocation
         setTimeout(() => URL.revokeObjectURL(link.href), 100);
 
-      } } catch (error) {
-      console.error(error);
-      // This will now print the EXACT error message on your screen
-      showError("An error occurred: " + error.message);
-    } finally {
-      genBtn.disabled = false;
-      genBtn.innerText = "Generate Final PDF";
-    }
+      } catch (error) {
+        console.error(error);
+        showError("An error occurred during merge: " + error.message);
+      } finally {
+        genBtn.disabled = false;
+        genBtn.innerText = "Generate Final PDF";
+      }
     }
   </script>
 </body>
