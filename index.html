@@ -189,7 +189,8 @@
         }
       }
     }
-async function generateReport() {
+
+    async function generateReport() {
       clearError();
       const reportFile = document.getElementById("reportInput").files[0];
       if (!reportFile) {
@@ -221,15 +222,14 @@ async function generateReport() {
         for (let i = 0; i < reportPages.length; i++) {
           const [contentPage] = await outputPdf.copyPages(reportPdf, [i]);
           
-          // FIX: Embed the content page so it turns into a valid PDFEmbeddedPage object
+          // Embed the content page so it turns into a valid PDFEmbeddedPage object
           const contentEmbed = await outputPdf.embedPage(contentPage);
-          
           const page = outputPdf.addPage([contentPage.getWidth(), contentPage.getHeight()]);
           
           // 1. Draw letterhead background layer first
           page.drawPage(lhEmbed, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
           
-          // 2. Draw report content layer on top (using the new contentEmbed variable)
+          // 2. Draw report content layer on top (using the contentEmbed variable)
           page.drawPage(contentEmbed, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
         }
 
