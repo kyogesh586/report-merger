@@ -2,183 +2,239 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Report on Letterhead</title>
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f3f5f8;
-      padding: 20px;
-    }
-    .card {
-      max-width: 520px;
-      margin: auto;
-      background: #fff;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 0 12px rgba(0,0,0,0.1);
-    }
-    h2 {
-      text-align: center;
-    }
-    label {
-      font-weight: bold;
-      margin-top: 15px;
-      display: block;
-    }
-    input {
-      width: 100%;
-      margin-top: 5px;
-    }
-    button {
-      margin-top: 20px;
-      width: 100%;
-      padding: 12px;
-      font-size: 16px;
-      background: #007bff;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-    button.secondary {
-      background: #6c757d;
-    }
-    button:hover {
-      opacity: 0.9;
-    }
-    .status {
-      font-size: 13px;
-      margin-top: 10px;
-      text-align: center;
-      color: green;
-    }
-    .note {
-      font-size: 12px;
-      color: #666;
-      text-align: center;
-      margin-top: 10px;
-    }
+    body { font-family: Arial, sans-serif; background: #f3f5f8; padding: 20px; }
+    .card { max-width: 520px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 12px rgba(0,0,0,0.1); }
+    h2 { text-align: center; }
+    label { font-weight: bold; margin-top: 15px; display: block; }
+    input { width: 100%; margin-top: 5px; }
+    button { margin-top: 20px; width: 100%; padding: 12px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button.secondary { background: #6c757d; }
+    button:hover { opacity: 0.9; }
+    button:disabled { background: #cccccc; cursor: not-allowed; }
+    .status { font-size: 13px; margin-top: 10px; text-align: center; color: green; }
+    .error-status { font-size: 13px; margin-top: 10px; text-align: center; color: #dc3545; display: none; }
+    .note { font-size: 12px; color: #666; text-align: center; margin-top: 15px; line-height: 1.4; }
   </style>
 </head>
 <body>
-
-<div class="card">
-  <h2>Diagnostic Report Tool</h2>
-
-  <div id="letterheadSection">
-    <label>Upload Letterhead (One Time Only)</label>
-    <input type="file" id="letterheadInput" accept="application/pdf">
-    <button class="secondary" onclick="saveLetterhead()">Save Letterhead</button>
+  <div class="card">
+    <h2>Diagnostic Report Tool</h2>
+    
+    <div id="letterheadSection">
+      <label>Upload Letterhead (One Time Only)</label>
+      <input type="file" id="letterheadInput" accept="application/pdf">
+      <button class="secondary" id="saveLhBtn">Save Letterhead</button>
+    </div>
+    
+    <div id="savedStatus" class="status" style="display:none;">
+      ✅ Letterhead saved successfully
+    </div>
+    
+    <label>Upload Report PDF</label>
+    <input type="file" id="reportInput" accept="application/pdf">
+    
+    <button id="generateBtn">Generate Final PDF</button>
+    <button class="secondary" id="clearLhBtn">Change Letterhead</button>
+    
+    <div id="errorStatus" class="error-status"></div>
+    
+    <div class="note">
+      <strong>Note:</strong> Files are processed locally. Nothing is uploaded.<br>
+      <em>For best results, ensure your report PDF content has a transparent background.</em>
+    </div>
   </div>
 
-  <div id="savedStatus" class="status" style="display:none;">
-    ✅ Letterhead saved successfully
-  </div>
+  <script>
+    // --- IndexedDB Helper Wrapper ---
+    const DB_NAME = 'ReportMergerDB';
+    const STORE_NAME = 'FilesStore';
+    const LH_KEY = 'savedLetterhead';
 
-  <label>Upload Report PDF</label>
-  <input type="file" id="reportInput" accept="application/pdf">
+    function initDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME);
+          }
+        };
+        request.onsuccess = (e) => resolve(e.target.result);
+        request.onerror = (e) => reject(e.target.error);
+      });
+    }
 
-  <button onclick="generateReport()">Generate Final PDF</button>
+    async function getStoredLetterhead() {
+      const db = await initDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.get(LH_KEY);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
 
-  <button class="secondary" onclick="clearLetterhead()">Change Letterhead</button>
+    async function setStoredLetterhead(arrayBuffer) {
+      const db = await initDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.put(arrayBuffer, LH_KEY);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    }
 
-  <div class="note">
-    Files are processed locally. Nothing is uploaded.
-  </div>
-</div>
+    async function clearStoredLetterhead() {
+      const db = await initDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.delete(LH_KEY);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    }
 
-<script>
-const STORAGE_KEY = "savedLetterheadPDF";
+    // --- UI State Management ---
+    function showError(message) {
+      const errDiv = document.getElementById("errorStatus");
+      errDiv.innerText = message;
+      errDiv.style.display = "block";
+    }
 
-window.onload = () => {
-  if (localStorage.getItem(STORAGE_KEY)) {
-    document.getElementById("letterheadSection").style.display = "none";
-    document.getElementById("savedStatus").style.display = "block";
-  }
-};
+    function clearError() {
+      document.getElementById("errorStatus").style.display = "none";
+    }
 
-async function saveLetterhead() {
-  const file = document.getElementById("letterheadInput").files[0];
-  if (!file) {
-    alert("Please select a letterhead PDF.");
-    return;
-  }
+    // --- App Logic ---
+    window.onload = async () => {
+      try {
+        const hasLh = await getStoredLetterhead();
+        if (hasLh) {
+          document.getElementById("letterheadSection").style.display = "none";
+          document.getElementById("savedStatus").style.display = "block";
+        }
+      } catch (err) {
+        console.error("Failed to read from IndexedDB:", err);
+      }
 
-  const buffer = await file.arrayBuffer();
-  const base64 = btoa(
-    new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-  );
+      // Attach event listeners safely
+      document.getElementById("saveLhBtn").addEventListener("click", saveLetterhead);
+      document.getElementById("clearLhBtn").addEventListener("click", clearLetterhead);
+      document.getElementById("generateBtn").addEventListener("click", generateReport);
+    };
 
-  localStorage.setItem(STORAGE_KEY, base64);
+    async function saveLetterhead() {
+      clearError();
+      const file = document.getElementById("letterheadInput").files[0];
+      if (!file) {
+        alert("Please select a letterhead PDF.");
+        return;
+      }
 
-  document.getElementById("letterheadSection").style.display = "none";
-  document.getElementById("savedStatus").style.display = "block";
-}
+      const saveBtn = document.getElementById("saveLhBtn");
+      saveBtn.disabled = true;
+      saveBtn.innerText = "Saving...";
 
-function clearLetterhead() {
-  if (confirm("Are you sure you want to change the letterhead?")) {
-    localStorage.removeItem(STORAGE_KEY);
-    location.reload();
-  }
-}
+      try {
+        const buffer = await file.arrayBuffer();
+        
+        // Quick verification: attempt to load it with pdf-lib to check if it's corrupted
+        await PDFLib.PDFDocument.load(buffer);
+        
+        // Save raw ArrayBuffer directly to IndexedDB (No performance-heavy base64 conversions)
+        await setStoredLetterhead(buffer);
 
-async function generateReport() {
-  const reportFile = document.getElementById("reportInput").files[0];
-  const storedLetterhead = localStorage.getItem(STORAGE_KEY);
+        document.getElementById("letterheadSection").style.display = "none";
+        document.getElementById("savedStatus").style.display = "block";
+      } catch (error) {
+        console.error(error);
+        showError("Error saving letterhead: Ensure the file is a valid, unencrypted PDF.");
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerText = "Save Letterhead";
+      }
+    }
 
-  if (!storedLetterhead) {
-    alert("Please upload and save letterhead first.");
-    return;
-  }
-  if (!reportFile) {
-    alert("Please upload a report PDF.");
-    return;
-  }
+    async function clearLetterhead() {
+      if (confirm("Are you sure you want to change the letterhead?")) {
+        try {
+          await clearStoredLetterhead();
+          location.reload();
+        } catch (error) {
+          console.error(error);
+          showError("Failed to clear letterhead from local storage.");
+        }
+      }
+    }
 
-  const letterheadBytes = Uint8Array.from(atob(storedLetterhead), c => c.charCodeAt(0));
-  const reportBytes = await reportFile.arrayBuffer();
+    async function generateReport() {
+      clearError();
+      const reportFile = document.getElementById("reportInput").files[0];
+      
+      if (!reportFile) {
+        alert("Please upload a report PDF.");
+        return;
+      }
 
-  const outputPdf = await PDFLib.PDFDocument.create();
-  const letterheadPdf = await PDFLib.PDFDocument.load(letterheadBytes);
-  const reportPdf = await PDFLib.PDFDocument.load(reportBytes);
+      const genBtn = document.getElementById("generateBtn");
+      genBtn.disabled = true;
+      genBtn.innerText = "Generating PDF...";
 
-  const [lhPage] = await outputPdf.copyPages(letterheadPdf, [0]);
-  const lhEmbed = await outputPdf.embedPage(lhPage);
+      try {
+        const letterheadBytes = await getStoredLetterhead();
+        if (!letterheadBytes) {
+          alert("Please upload and save a letterhead first.");
+          genBtn.disabled = false;
+          genBtn.innerText = "Generate Final PDF";
+          return;
+        }
 
-  const reportPages = reportPdf.getPages();
+        const reportBytes = await reportFile.arrayBuffer();
 
-  for (let i = 0; i < reportPages.length; i++) {
-    const [contentPage] = await outputPdf.copyPages(reportPdf, [i]);
-    const page = outputPdf.addPage([
-      contentPage.getWidth(),
-      contentPage.getHeight()
-    ]);
+        const outputPdf = await PDFLib.PDFDocument.create();
+        const letterheadPdf = await PDFLib.PDFDocument.load(letterheadBytes);
+        const reportPdf = await PDFLib.PDFDocument.load(reportBytes);
 
-    page.drawPage(lhEmbed, {
-      x: 0,
-      y: 0,
-      width: page.getWidth(),
-      height: page.getHeight()
-    });
+        const [lhPage] = await outputPdf.copyPages(letterheadPdf, [0]);
+        const lhEmbed = await outputPdf.embedPage(lhPage);
+        const reportPages = reportPdf.getPages();
 
-    page.drawPage(contentPage, {
-      x: 0,
-      y: 0,
-      width: page.getWidth(),
-      height: page.getHeight()
-    });
-  }
+        for (let i = 0; i < reportPages.length; i++) {
+          const [contentPage] = await outputPdf.copyPages(reportPdf, [i]);
+          const page = outputPdf.addPage([contentPage.getWidth(), contentPage.getHeight()]);
+          
+          // Render background layer
+          page.drawPage(lhEmbed, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
+          // Render data overlay layer
+          page.drawPage(contentPage, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
+        }
 
-  const finalBytes = await outputPdf.save();
-  const blob = new Blob([finalBytes], { type: "application/pdf" });
+        const finalBytes = await outputPdf.save();
+        const blob = new Blob([finalBytes], { type: "application/pdf" });
+        
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "Final_Report_On_Letterhead.pdf";
+        link.click();
+        
+        // Clean memory allocation
+        setTimeout(() => URL.revokeObjectURL(link.href), 100);
 
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "Final_Report_On_Letterhead.pdf";
-  link.click();
-}
-</script>
-
+      } catch (error) {
+        console.error(error);
+        showError("An error occurred while merging. Please ensure both PDFs are standard, unencrypted files.");
+      } finally {
+        genBtn.disabled = false;
+        genBtn.innerText = "Generate Final PDF";
+      }
+    }
+  </script>
 </body>
 </html>
