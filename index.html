@@ -227,13 +227,14 @@
         // Clean memory allocation
         setTimeout(() => URL.revokeObjectURL(link.href), 100);
 
-      } catch (error) {
-        console.error(error);
-        showError("An error occurred while merging. Please ensure both PDFs are standard, unencrypted files.");
-      } finally {
-        genBtn.disabled = false;
-        genBtn.innerText = "Generate Final PDF";
-      }
+      } } catch (error) {
+      console.error(error);
+      // This will now print the EXACT error message on your screen
+      showError("An error occurred: " + error.message);
+    } finally {
+      genBtn.disabled = false;
+      genBtn.innerText = "Generate Final PDF";
+    }
     }
   </script>
 </body>
