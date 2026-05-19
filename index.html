@@ -212,8 +212,17 @@
 
         const reportBytes = await reportFile.arrayBuffer();
         const outputPdf = await PDFLib.PDFDocument.create();
-        const letterheadPdf = await PDFLib.PDFDocument.load(letterheadBytes);
-        const reportPdf = await PDFLib.PDFDocument.load(reportBytes);
+        const letterheadPdf = await PDFLib.PDFDocument.load(letterheadBytes, {
+  ignoreEncryption: true,
+  throwOnInvalidObject: false,
+  updateMetadata: false
+});
+
+const reportPdf = await PDFLib.PDFDocument.load(reportBytes, {
+  ignoreEncryption: true,
+  throwOnInvalidObject: false,
+  updateMetadata: false
+});
 
         const [lhPage] = await outputPdf.copyPages(letterheadPdf, [0]);
         const lhEmbed = await outputPdf.embedPage(lhPage);
