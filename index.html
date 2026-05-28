@@ -1,369 +1,173 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Diagnostic Report Tool</title>
-
-  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      padding: 20px;
-      background: #f3f5f8;
-      font-family: Arial, sans-serif;
-    }
-
-    .card {
-      max-width: 550px;
-      margin: auto;
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-
-    h2 {
-      margin-top: 0;
-      text-align: center;
-    }
-
-    label {
-      display: block;
-      margin-top: 15px;
-      font-weight: bold;
-    }
-
-    input[type="file"] {
-      width: 100%;
-      margin-top: 5px;
-    }
-
-    button {
-      width: 100%;
-      padding: 12px;
-      margin-top: 20px;
-      border: none;
-      border-radius: 5px;
-      background: #007bff;
-      color: white;
-      font-size: 16px;
-      cursor: pointer;
-    }
-
-    button.secondary {
-      background: #6c757d;
-    }
-
-    button:disabled {
-      background: #cccccc;
-      cursor: not-allowed;
-    }
-
-    .status {
-      margin-top: 10px;
-      color: green;
-      text-align: center;
-      font-size: 14px;
-    }
-
-    .error {
-      margin-top: 10px;
-        color: #dc3545;
-      text-align: center;
-      font-size: 14px;
-      white-space: pre-line;
-    }
-
-    .loading {
-      margin-top: 10px;
-      text-align: center;
-      font-size: 14px;
-      display: none;
-    }
-
-    .note {
-      margin-top: 15px;
-      font-size: 12px;
-      color: #666;
-      text-align: center;
-      line-height: 1.5;
-    }
-  </style>
-</head>
-<body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Diagnostic Report Tool</title>
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 20px; background: #f3f5f8; font-family: Arial, sans-serif; }
+      .card { max-width: 550px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+      h2 { margin-top: 0; text-align: center; }
+      label { display: block; margin-top: 15px; font-weight: bold; }
+      input[type="file"] { width: 100%; margin-top: 5px; }
+      button { width: 100%; padding: 12px; margin-top: 20px; border: none; border-radius: 5px; background: #007bff; color: white; font-size: 16px; cursor: pointer; }
+      button.secondary { background: #6c757d; }
+      button:disabled { background: #cccccc; cursor: not-allowed; }
+      .status { margin-top: 10px; color: green; text-align: center; font-size: 14px; }
+      .error { margin-top: 10px; color: #dc3545; text-align: center; font-size: 14px; white-space: pre-line; }
+      .loading { margin-top: 10px; text-align: center; font-size: 14px; display: none; }
+      .note { margin-top: 15px; font-size: 12px; color: #666; text-align: center; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
     <div class="card">
+      <h2>Diagnostic Report Tool</h2>
+      <div id="lhSection">
+        <label>Upload Letterhead PNG (One Time Only)</label>
+        <input type="file" id="lhInput" accept="image/png" />
+        <button class="secondary" id="saveBtn">Save Letterhead</button>
+      </div>
+      <div id="savedStatus" class="status" style="display:none;">
+        ✅ Letterhead saved successfully
+      </div>
+      <label>Upload Report PDF</label>
+      <input type="file" id="reportInput" accept="application/pdf" />
+      <button id="generateBtn">Generate Final PDF</button>
+      <button class="secondary" id="changeBtn" style="display:none;">
+        Change Letterhead
+      </button>
+      <div id="loading" class="loading">Processing PDF... Please wait.</div>
+      <div id="error" class="error"></div>
+      <div class="note">
+        Files are processed locally in your browser.<br />
+        Nothing is uploaded to any server.
+      </div>
+    </div>
 
-  <h2>Diagnostic Report Tool</h2>
+    <script>
+      const STORAGE_KEY = 'saved_letterhead';
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-  <div id="lhSection">
-    <label>Upload Letterhead PDF (One Time Only)</label>
-    <input type="file" id="lhInput" accept="application/pdf" />
-    <button class="secondary" id="saveBtn">Save Letterhead</button>
-  </div>
+      function showError(msg) { document.getElementById('error').innerText = msg; }
+      function clearError() { document.getElementById('error').innerText = ''; }
+      function setLoading(show) { document.getElementById('loading').style.display = show ? 'block' : 'none'; }
 
-  <div id="savedStatus" class="status" style="display:none;">
-    ✅ Letterhead saved successfully
-  </div>
+      function updateUI(hasLetterhead) {
+        document.getElementById('lhSection').style.display = hasLetterhead ? 'none' : 'block';
+        document.getElementById('savedStatus').style.display = hasLetterhead ? 'block' : 'none';
+        document.getElementById('changeBtn').style.display = hasLetterhead ? 'block' : 'none';
+        document.getElementById('generateBtn').disabled = !hasLetterhead;
+      }
 
-  <label>Upload Report PDF</label>
-  <input type="file" id="reportInput" accept="application/pdf" />
+      window.onload = () => {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        updateUI(!!saved);
+        document.getElementById('saveBtn').addEventListener('click', saveLetterhead);
+        document.getElementById('changeBtn').addEventListener('click', clearLetterhead);
+        document.getElementById('generateBtn').addEventListener('click', generatePDF);
+      };
 
-  <button id="generateBtn">Generate Final PDF</button>
+      // CHANGED: Reads the PNG file directly as a Data URL (base64) and saves it
+      async function saveLetterhead() {
+        clearError();
+        const file = document.getElementById('lhInput').files[0];
+        if (!file) {
+          alert('Please select a letterhead PNG');
+          return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          localStorage.setItem(STORAGE_KEY, e.target.result);
+          updateUI(true);
+        };
+        reader.readAsDataURL(file);
+      }
 
-  <button class="secondary" id="changeBtn" style="display:none;">
-    Change Letterhead
-  </button>
+      function clearLetterhead() {
+        if (!confirm('Change saved letterhead?')) return;
+        localStorage.removeItem(STORAGE_KEY);
+        updateUI(false);
+      }
 
-  <div id="loading" class="loading">
-    Processing PDF... Please wait.
-  </div>
+      async function renderPdfPageToImage(pdfDoc, pageNumber, scale = 2) {
+        const page = await pdfDoc.getPage(pageNumber);
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: context, viewport }).promise;
+        return { image: canvas.toDataURL('image/png'), width: viewport.width, height: viewport.height };
+      }
 
-  <div id="error" class="error"></div>
+      async function generatePDF() {
+        clearError();
+        const reportFile = document.getElementById('reportInput').files[0];
+        if (!reportFile) {
+          alert('Please upload a report PDF');
+          return;
+        }
+        const savedLetterhead = localStorage.getItem(STORAGE_KEY);
+        if (!savedLetterhead) {
+          alert('Please save letterhead first');
+          return;
+        }
 
-  <div class="note">
-    Files are processed locally in your browser.<br>
-    Nothing is uploaded to any server.
-  </div>
+        const btn = document.getElementById('generateBtn');
+        btn.disabled = true;
+        btn.innerText = 'Generating PDF...';
+        setLoading(true);
 
-</div>
-<script>
-
-const STORAGE_KEY = 'saved_letterhead';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-function showError(msg) {
-  document.getElementById('error').innerText = msg;
-}
-
-function clearError() {
-  document.getElementById('error').innerText = '';
-}
-
-function setLoading(show) {
-  document.getElementById('loading').style.display = show ? 'block' : 'none';
-}
-
-function updateUI(hasLetterhead) {
-
-  document.getElementById('lhSection').style.display =
-    hasLetterhead ? 'none' : 'block';
-
-  document.getElementById('savedStatus').style.display =
-    hasLetterhead ? 'block' : 'none';
-
-  document.getElementById('changeBtn').style.display =
-    hasLetterhead ? 'block' : 'none';
-
-  document.getElementById('generateBtn').disabled =
-    !hasLetterhead;
-}
-    window.onload = () => {
-
-  const saved = localStorage.getItem(STORAGE_KEY);
-
-  updateUI(!!saved);
-
-  document
-    .getElementById('saveBtn')
-    .addEventListener('click', saveLetterhead);
-
-  document
-    .getElementById('changeBtn')
-    .addEventListener('click', clearLetterhead);
-
-  document
-    .getElementById('generateBtn')
-    .addEventListener('click', generatePDF);
-};
-    async function saveLetterhead() {
-
-  clearError();
-
-  const file = document.getElementById('lhInput').files[0];
-
-  if (!file) {
-    alert('Please select a letterhead PDF');
-    return;
-  }
-
-  const bytes = await file.arrayBuffer();
-
-  const binary = Array.from(new Uint8Array(bytes))
-    .map(b => String.fromCharCode(b))
-    .join('');
-
-  localStorage.setItem(STORAGE_KEY, btoa(binary));
-
-  updateUI(true);
-}
-    function clearLetterhead() {
-
-  if (!confirm('Change saved letterhead?')) return;
-
-  localStorage.removeItem(STORAGE_KEY);
-
-  updateUI(false);
-}
-
-async function renderPdfPageToImage(pdfDoc, pageNumber, scale = 2) {
-
-  const page = await pdfDoc.getPage(pageNumber);
-
-  const viewport = page.getViewport({ scale });
-
-  const canvas = document.createElement('canvas');
-
-  const context = canvas.getContext('2d');
-
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-
-  await page.render({
-    canvasContext: context,
-    viewport
-  }).promise;
-
-  return {
-    image: canvas.toDataURL('image/png'),
-    width: viewport.width,
-    height: viewport.height
-  };
-}
-    async function generatePDF() {
-
-  clearError();
-
-  const reportFile = document.getElementById('reportInput').files[0];
-
-  if (!reportFile) {
-    alert('Please upload a report PDF');
-    return;
-  }
-
-  const savedLetterhead = localStorage.getItem(STORAGE_KEY);
-
-  if (!savedLetterhead) {
-    alert('Please save letterhead first');
-    return;
-  }
-
-  const btn = document.getElementById('generateBtn');
-
-  btn.disabled = true;
-  btn.innerText = 'Generating PDF...';
-
-  setLoading(true);
         try {
+          // =============================
+          // LOAD REPORT PDF
+          // =============================
+          const reportBytes = await reportFile.arrayBuffer();
+          const reportPdf = await pdfjsLib.getDocument({ data: reportBytes }).promise;
 
-    // =============================
-    // LOAD LETTERHEAD PDF
-    // =============================
+          // =============================
+          // CREATE FINAL PDF
+          // =============================
+          const finalPdf = await PDFLib.PDFDocument.create();
+          
+          // CHANGED: Embed the saved PNG letterhead data URL directly into pdf-lib
+          const lhImage = await finalPdf.embedPng(savedLetterhead);
 
-    const lhBinary = atob(savedLetterhead);
+          for (let i = 1; i <= reportPdf.numPages; i++) {
+            const rendered = await renderPdfPageToImage(reportPdf, i, 2);
+            const page = finalPdf.addPage([rendered.width, rendered.height]);
 
-    const lhBytes = Uint8Array.from(lhBinary, c => c.charCodeAt(0));
+            // Report image
+            const reportImage = await finalPdf.embedPng(rendered.image);
+            page.drawImage(reportImage, { x: 0, y: 0, width: rendered.width, height: rendered.height });
 
-    const lhPdf = await pdfjsLib.getDocument({ data: lhBytes }).promise;
+            // Letterhead overlay (Stretches/fits to the report page size)
+            page.drawImage(lhImage, { x: 0, y: 0, width: rendered.width, height: rendered.height });
+          }
 
-    const lhRendered = await renderPdfPageToImage(lhPdf, 1, 2);
-
-    // =============================
-    // LOAD REPORT PDF
-    // =============================
-
-    const reportBytes = await reportFile.arrayBuffer();
-
-    const reportPdf = await pdfjsLib.getDocument({
-      data: reportBytes
-    }).promise;
-
-    // =============================
-    // CREATE FINAL PDF
-    // =============================
-
-    const finalPdf = await PDFLib.PDFDocument.create();
-
-    for (let i = 1; i <= reportPdf.numPages; i++) {
-
-      const rendered = await renderPdfPageToImage(reportPdf, i, 2);
-
-      const page = finalPdf.addPage([
-        rendered.width,
-        rendered.height
-      ]);
-
-      // Report image
-      const reportImage = await finalPdf.embedPng(rendered.image);
-
-      page.drawImage(reportImage, {
-        x: 0,
-        y: 0,
-        width: rendered.width,
-        height: rendered.height
-      });
-
-      // Letterhead overlay
-      const lhImage = await finalPdf.embedPng(lhRendered.image);
-
-      page.drawImage(lhImage, {
-        x: 0,
-        y: 0,
-        width: rendered.width,
-        height: rendered.height
-      });
-    }
-            const finalBytes = await finalPdf.save();
-
-    const blob = new Blob([
-      finalBytes
-    ], {
-      type: 'application/pdf'
-    });
-
-    const url = URL.createObjectURL(blob);
-
-    const link = document.createElement('a');
-
-    link.href = url;
-
-    link.download = 'Final_Report_On_Letterhead.pdf';
-
-    document.body.appendChild(link);
-
-    link.click();
-
-    document.body.removeChild(link);
-
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-    }, 1000);
-            } catch (error) {
-
-    console.error(error);
-
-    showError(
-      'Failed to process PDF.\n\nTry opening the report and using Print → Save as PDF, then upload again.'
-    );
-
-  } finally {
-
-    btn.disabled = false;
-    btn.innerText = 'Generate Final PDF';
-
-    setLoading(false);
-  }
-}
-
-</script>
-
-</body>
+          const finalBytes = await finalPdf.save();
+          const blob = new Blob([finalBytes], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'Final_Report_On_Letterhead.pdf';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
+        } catch (error) {
+          console.error(error);
+          showError('Failed to process PDF.\n\nTry opening the report and using Print → Save as PDF, then upload again.');
+        } finally {
+          btn.disabled = false;
+          btn.innerText = 'Generate Final PDF';
+          setLoading(false);
+        }
+      }
+    </script>
+  </body>
 </html>
